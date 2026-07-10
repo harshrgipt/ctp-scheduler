@@ -1,0 +1,86 @@
+# CTP (PCR) scheduler — self-contained, file-based config.
+# All paths resolve relative to this file's folder (the ctp_scheduler/ project root).
+
+# All inputs sourced from the ctp_inputfiles folder (sibling of ctp_scheduler/).
+inputs:
+  drum:               "../ctp_inputfiles/CTP_PCR_Curing_Schedule_2026-07-03 1 (1).xlsx"
+  bom:                "../ctp_inputfiles/jkplanning_CTP_jkt_bom_pcr.csv"   # fuller BOM (224 SKUs)
+  routing:            "../ctp_inputfiles/jkt_routing_pcr 13.xlsx"          # xlsx (loader is xlsx-aware)
+  aging:              "../ctp_inputfiles/jkt_aging_master_pcr.csv"
+  itemtype:           "../ctp_inputfiles/jkt_itemType_master_pcr.csv"
+  buffer:             "../ctp_inputfiles/jkt_buffer_master_pcr.csv"
+  mpq:                "../ctp_inputfiles/MOQ (3).xlsx"                      # min-only; unused under produce_to_demand
+  transfer:                                                                # no transfer file in folder -> flat 10-min default
+  changeover_matrix:  "../ctp_inputfiles/jkt_changeover_matrix_combined (1).xlsx"  # xlsx
+  opening_wip:        "../ctp_inputfiles/opening_wip.csv"                  # absent -> phase1c no-ops (inventory/ is raw MES, not a snapshot)
+
+outputs_dir:  outputs
+outputs2_dir: outputs2
+
+mode:
+  enforce_commit_test:   false
+  enforce_strict_horizon: false
+  drum_immutable:        true
+
+# FULL PLANT — all SKUs (slice OFF).
+slice:
+  enabled: false
+  max_skus: 100000
+  one_wave_only: false
+  only_skus:
+
+timezone: Asia/Kolkata
+plant_day_start_hour: 7
+wave_duration_days: 3
+
+# Zero lead time: scheduling starts at plan start; opening WIP is consumed first (phase1c).
+pre_curing_buffer_h: 2.0
+schedule_open_lead_h: 0.0
+produce_to_demand: true       # CTP: lot qty = demand; MPQ minimum NOT used to pad up, max ignored.
+front_prime_days: 0.0
+fefo_matching: true           # FEFO producer->consumer matching for the aging ledger.
+
+max_lot_duration_h: 8.0
+max_sub_lots: 50
+bucket_safety_h: 6.0
+green_tyre_cure_by_h: 8.0
+green_tyre_min_age_h: 0.0
+oee: 1.0
+efficiency_override: 1.0
+cure_min_band:
+- 10.0
+- 30.0
+no_aest_item_types:
+- MASTER COMPOUND
+- FINAL COMPOUND
+
+changeover_min:
+  default: 15.0
+  mixing: 2.0
+  4 Roll Calender: 44.0
+  Roller Head Calender: 25.5
+  Triplex Extruder: 22.5
+  Quintoplex Extruder: 23.71
+  Ply Cutter: 6.0
+  Belt Cutter: 6.0
+  Building: 0.0
+  Carcass Building (1st Stage): 0.0
+
+# Per-ItemCode aging master is authoritative; these type ceilings only tighten it.
+planning_max_aging_h:
+  MASTER COMPOUND: 360.0
+  FINAL COMPOUND: 120.0
+  CALANDARED ROLL: 72.0
+  Inner Liner: 72.0
+  Tread: 72.0
+  SideWall: 72.0
+  Steel Belt: 24.0
+  Ply: 24.0
+  Bead Apex: 72.0
+
+# Pooled-batch window factor (<1 tightens component/compound batches below raw shelf
+# life to absorb multi-level pooling drift -> fresher, more frequent batches).
+pooled_window_factor: 0.8
+
+# Phase 1c MRP netting: max-aging window default (hours) for items missing an aging entry.
+mrp_default_max_aging_h: 72
