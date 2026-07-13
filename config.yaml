@@ -1,0 +1,126 @@
+# ctp_v6 — CTP (PCR) scheduler running the v6_wave_p2 algorithm, unmodified.
+#
+# The `phases/*.py` files are BYTE-IDENTICAL copies of v6_wave_p2/phases/*.py.
+# This config mirrors v6_wave_p2/config.yaml exactly. Every v6 tuning value below is
+# v6's OWN config value — never the `cfg.get(key, default)` fallback found in its code
+# (those fallbacks are 168/168/72 and are NOT what v6 runs with).
+#
+# CTP-specific facts live in MEMORY.md. Read it before changing anything here.
+
+# ---------------------------------------------------------------- data source
+# v6 defaults to `db`. CTP has no DB; everything is file-based.
+data_source: csv
+
+# ------------------------------------------------- v6 INPUTS (written by adapt_inputs.py)
+# These are the files v6's phases actually open, with v6's own names. They are GENERATED
+# from the CTP masters listed under `ctp_files` below — run `python adapt_inputs.py` first.
+files:
+  bom:               "bom.csv"
+  routing:           "routing.csv"
+  plan:              "plan.csv"
+  itemtype_master:   "itemtype_master.csv"
+  aging_master:      "aging_master.csv"
+  mpq:               "mpq.csv"
+  buffer_master:     "buffer_master.csv"
+  inventory:         "inventory.csv"
+  # mg_preference    — NOT PROVIDED. MG excluded by user instruction (phase1a is not run).
+  # belt_wire_mapping— NOT PROVIDED. CTP has no belt-wire campaign data, so v6's
+  #                    `size_wire_campaigns_per_wave` never fires and every belt lot is
+  #                    sized by the ordinary wave-aware sizer. This is v6's own graceful
+  #                    fallback (`belt_to_wire = {}`), not a change.
+
+# ------------------------------------------------------------- CTP SOURCE MASTERS
+# Bundled inside this folder, so the project is SELF-CONTAINED and runs on any machine.
+# Path is resolved relative to this config file, never to the current working directory.
+ctp_inputs_dir: "ctp_inputfiles"
+ctp_files:
+  bom:                "jkt_bom_pcr 13 (1).xlsx"
+  routing:            "jkt_routing_pcr 14.xlsx"
+  plan:               "CTP_PCR_Curing_Schedule_2026-07-03 (1).xlsx"
+  itemtype:           "jkt_itemType_master_pcr.csv"
+  aging:              "jkt_aging_master_pcr.csv"
+  mpq:                "MOQ (3).xlsx"
+  buffer:             "jkt_buffer_master_pcr.csv"
+  inventory:          "opening_wip.csv"
+  changeover_matrix:  "jkt_changeover_matrix_combined (1).xlsx"   # CTP-ONLY — see MEMORY.md
+
+# ================================================================================
+# v6 TUNING — every value below is copied from v6_wave_p2/config.yaml. Do not "fix".
+# ================================================================================
+
+# pre_curing_buffer_h: safety fallback between Green-Tyre finish and curing start,
+#   used only when the green tyre has no min_aging in the aging master.
+# global_max_lookback_h: safety ceiling for AEST (non-bottleneck items).
+# schedule_open_h: hours BEFORE the first curing slot that the plant's floor opens.
+# enforce_strict_horizon: a lot finishing past planEndDate is flagged PAST_HORIZON
+#   (still placed).
+pre_curing_buffer_h:     8
+global_max_lookback_h:   120
+schedule_open_h:         24
+enforce_strict_horizon:  true
+max_lot_duration_h:      8.0
+
+# FRC (belt cutter) campaign rules. Kept at v6's values for fidelity. INERT on CTP:
+# without belt_wire_mapping.csv, `belt_to_wire` is empty and no campaign is ever built.
+frc_campaign_max_m:  8000
+frc_belt_lot_max_mm: 400000
+frc_belt_lot_min_mm: 200000
+frc_cooldown_min:    360
+frc_pad_to_floor:    true
+
+selected_skus: []
+
+# ================================================================================
+# CTP CHANGEOVER MATRIX — machine-id -> matrix "machine" (line) name
+# ================================================================================
+# The plant matrix `jkt_changeover_matrix_combined (1).xlsx` is keyed on a machine NAME
+# ("4 RC Calendar"), but the routing is keyed on a machine ID ("901"). The two sets have
+# ZERO string overlap, so this table is the bridge. It is built from the user's own
+# machine list (`pcr machines.png`) — NOT guessed.
+#
+# ⚠️ REVIEW THESE. The IDs come straight from the machine list; the right-hand names are
+#    matched to the 22 line names actually present in the matrix. Where the wording differs
+#    the match is noted. Correct any line here — nothing else needs to change.
+#
+# A machine NOT listed here, or a pair the matrix does not carry, falls through to v6's own
+# `compute_changeover_min` (mixing = 2 min, everything else = 15 min). Unchanged v6 behaviour.
+machine_to_changeover_line:
+  "901":  "4 RC Calendar"             # machine list: "4 Roll Calender"
+  "1101": "Roller Head Calendar PCR"  # machine list: "Roller Head Calender PCR"
+  "1001": "Triplex PCR SW"            # machine list: "Triplex Extruder PCR"    (makes SideWall)
+  "1002": "Quintoplex PCR Tread"      # machine list: "Quintoplex Extruder PCR" (makes Tread)
+  "1103": "Ply Cutter PCR"            # machine list: "Textile Ply Cutter PCR"
+  "1104": "Fisher Cutter PCR"         # machine list: "Fischer Ply Cutter PCR"  (not in routing today)
+  "801":  "Belt Cutter PCR"           # exact
+  "601":  "Cap Ply Cutter"            # exact. NB the routing runs op EDGE GUM on 601, and the
+                                      #   machine list confirms 601 outputs "Cap ply, Edge gum".
+  "2401": "Chaffer Slitter"           # machine list: "Chafer slitter"  (matrix spells it "Chaffer")
+  "2402": "Chaffer Slitter"
+  "1201": "PCR Bead Winding"          # machine list: "Bead Winding PCR"
+  "201":  "PCR Bead Apexing"          # machine list: "Bead Apexing PCR" (ids 0201/0202)
+  "202":  "PCR Bead Apexing"
+  # ---- deliberately NOT mapped: the matrix carries no line for these ----
+  #   701, 702         Cap Strip Slitter   -> no matrix line
+  #   2501, 2502       Chafer doubling     -> no matrix line
+  #   2001             Bias cutter         -> matrix has only "Bias Cutter TBR" (TBR, not PCR)
+  #   3401..3411       Building            -> no matrix line
+  #   curing presses   Curing              -> no matrix line (curing is a pinned echo anyway)
+  #   270M/430-1/430-2/440M/310/F270  Mixers -> no matrix line; v6's dept-MIX rule gives 2 min
+
+# ================================================================================
+# PLANNING MAX AGING — v6 reads this as a master FILE (phase4_cpm.py:340-347),
+# keyed by ItemType, and applies it ONLY in phase4:
+#     effective_max_aging = min(chemistry_max, planning_max)
+# adapt_inputs.py writes it out as inputs/planning_max_aging.csv in v6's schema.
+# ================================================================================
+planning_max_aging_h:
+  MASTER COMPOUND: 360.0
+  FINAL COMPOUND:  120.0
+  CALANDARED ROLL:  72.0
+  Inner Liner:      72.0
+  Tread:            72.0
+  SideWall:         72.0
+  Steel Belt:       24.0
+  Ply:              24.0
+  Bead Apex:        72.0
+  Cap Strip:        24.0
