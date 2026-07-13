@@ -1,7 +1,5 @@
 # ctp_v6 — CTP (PCR) Production Scheduler
 
-> ### 👉 Reviewing this to fix the data? Read **[`ISSUES.md`](ISSUES.md)** — that is the handover list.
-> Everything open is a **master-data** gap. No code change is needed for any of it.
 
 A finite-capacity production scheduler for **JK Tyre CTP Chennai (PCR)**.
 
